@@ -113,10 +113,39 @@ Want packing suggestions?"
 - Push notification support
 
 ### LLM Agent
-- _(To be determined)_
+- **Google Gemini 1.5 Flash**
+- Free tier with generous rate limits (1500 requests per day)
+- Fast response times ideal for real-time mobile chat
+- Native function calling for seamless MCP tool integration
+- Multimodal capabilities (can process text and images)
+- Accessed via Google AI Studio API
 
 ### MCP Tools Implementation
-- _(To be determined)_
+1. **Weather API: OpenWeatherMap**
+   - Free tier: 1,000 API calls/day
+   - Provides current weather, 5-day forecasts, and severe weather alerts
+   - Global coverage with 200,000+ cities
+   - API Documentation: https://openweathermap.org/api
+   - Endpoints used:
+     - Current Weather Data
+     - 5 Day / 3 Hour Forecast
+     - Weather Alerts
+
+2. **Location/Geocoding: OpenWeatherMap Geocoding API**
+   - Included free with OpenWeatherMap API key
+   - Converts city names, ZIP codes, and addresses to geographic coordinates
+   - Reverse geocoding (coordinates to location names)
+   - Supports international locations
+   - API Documentation: https://openweathermap.org/api/geocoding-api
+
+3. **Calendar Integration: Google Calendar API**
+   - Free tier with generous quotas
+   - Full read/write access to user calendars
+   - Event creation, modification, and deletion
+   - Recurring event support
+   - Push notifications for calendar changes
+   - API Documentation: https://developers.google.com/calendar/api
+   - Integrates seamlessly with Google account ecosystem
 
 ### Memory Storage
 - _(To be determined)_
