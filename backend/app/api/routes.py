@@ -18,6 +18,8 @@ from ..models.schemas import (
 )
 from ..tools import weather, geocoding, calendar
 from ..agent.weather_agent import get_agent_manager, WeatherAgentManager
+from ..services.notifications import get_notification_service
+from ..services.weather_alerts import get_weather_alert_service
 
 
 router = APIRouter()
@@ -233,6 +235,75 @@ async def health_check():
         "services": {
             "weather_api": "available",
             "geocoding": "available",
-            "calendar": await calendar.check_calendar_availability()
+            "calendar": await calendar.check_calendar_availability(),
+            "notifications": get_notification_service().is_available
         }
     }
+
+
+# ============== Notification Endpoints ==============
+
+@router.post("/notifications/register", tags=["Notifications"])
+async def register_device(user_id: str, device_token: str):
+    """Register a device for push notifications."""
+    service = get_notification_service()
+    success = service.register_device(user_id, device_token)
+    return {"status": "registered" if success else "failed", "user_id": user_id}
+
+
+@router.delete("/notifications/unregister/{user_id}", tags=["Notifications"])
+async def unregister_device(user_id: str):
+    """Unregister a device from push notifications."""
+    service = get_notification_service()
+    success = service.unregister_device(user_id)
+    return {"status": "unregistered" if success else "not_found", "user_id": user_id}
+
+
+@router.post("/notifications/test", tags=["Notifications"])
+async def send_test_notification(user_id: str, title: str, body: str):
+    """Send a test notification to a user."""
+    service = get_notification_service()
+    success = await service.send_notification(user_id, title, body)
+    return {"status": "sent" if success else "failed", "user_id": user_id}
+
+
+# ============== Weather Alert Subscription Endpoints ==============
+
+@router.post("/alerts/subscribe", tags=["Alerts"])
+async def subscribe_to_alerts(
+    user_id: str,
+    latitude: float,
+    longitude: float,
+    location_name: str,
+    rain_alerts: bool = True,
+    temperature_alerts: bool = True,
+    severe_weather_alerts: bool = True,
+):
+    """Subscribe to weather alerts for a location."""
+    service = get_weather_alert_service()
+    success = service.subscribe(
+        user_id=user_id,
+        latitude=latitude,
+        longitude=longitude,
+        location_name=location_name,
+        rain_alerts=rain_alerts,
+        temperature_alerts=temperature_alerts,
+        severe_weather_alerts=severe_weather_alerts,
+    )
+    return {"status": "subscribed" if success else "failed", "user_id": user_id}
+
+
+@router.delete("/alerts/unsubscribe/{user_id}", tags=["Alerts"])
+async def unsubscribe_from_alerts(user_id: str):
+    """Unsubscribe from weather alerts."""
+    service = get_weather_alert_service()
+    success = service.unsubscribe(user_id)
+    return {"status": "unsubscribed" if success else "not_found", "user_id": user_id}
+
+
+@router.post("/alerts/check/{user_id}", tags=["Alerts"])
+async def check_alerts_now(user_id: str):
+    """Manually trigger an alert check for a user."""
+    service = get_weather_alert_service()
+    alerts = await service.check_weather_for_user(user_id)
+    return {"user_id": user_id, "alerts": alerts, "count": len(alerts)}

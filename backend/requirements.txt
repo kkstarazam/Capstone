@@ -28,3 +28,7 @@ python-dotenv>=1.0.0
 # Testing
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
+httpx>=0.26.0  # Also needed for FastAPI TestClient
+
+# Firebase (optional - for production push notifications)
+# firebase-admin>=6.3.0
