@@ -363,4 +363,3 @@ MIT License - see LICENSE file for details.
 - Built as part of an agentic application course project
 - Weather data provided by [Open-Meteo](https://open-meteo.com/)
 - Geocoding by [OpenStreetMap/Nominatim](https://nominatim.org/)
-- Stateful agent powered by [Letta](https://www.letta.com/)
