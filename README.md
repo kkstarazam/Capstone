@@ -238,30 +238,26 @@ curl -X POST "http://localhost:8000/api/v1/alerts/subscribe?user_id=user123&lati
    - API Documentation: https://openweathermap.org/api/geocoding-api
 
 3. **Calendar Integration: Google Calendar API**
-   - Free tier with generous quotas
-   - Full read/write access to user calendars
-   - Event creation, modification, and deletion
-   - Recurring event support
-   - Push notifications for calendar changes
-   - API Documentation: https://developers.google.com/calendar/api
-   - Integrates seamlessly with Google account ecosystem
+**Authentication Type:** OAuth 2.0 (NOT an API key)
 
-User: "When should I go for a run this week?"
-Agent: "Based on this week's forecast, I recommend:
-       - Wednesday 6am: 58°F, clear skies
-       - Saturday 8am: 68°F, sunny (best option!)"
+Google Calendar requires OAuth 2.0 authentication for accessing personal calendars:
 
-User: "Will it rain today?"
-Agent: "There's a 75% chance of rain starting around 3pm.
-       I'd recommend bringing an umbrella if you're heading out!"
-```
+**What is OAuth 2.0?**
+A secure authorization flow where users grant your app permission to access their calendar without sharing passwords.
 
-## Testing
+**Setup Process:**
+1. Go to https://console.cloud.google.com/
+2. Create a new project (or select existing)
+3. Enable "Google Calendar API" from APIs & Services
+4. Create OAuth 2.0 Credentials:
+   - Go to "APIs & Services" → "Credentials"
+   - Click "Create Credentials" → "OAuth client ID"
+   - Choose application type (iOS/Android for mobile)
+   - Configure OAuth consent screen
+5. You'll receive:
+   - Client ID (can be in your app code)
+   - Client Secret (keep private)
 
-### Run All Tests
-```bash
-cd backend
-pytest -v
 ```
 
 ### Run Specific Test Files
