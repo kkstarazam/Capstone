@@ -5,7 +5,9 @@ https://nominatim.org/
 """
 import httpx
 from typing import Optional, List
+import logging
 
+logger = logging.getLogger(__name__)
 
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org"
 
@@ -13,6 +15,9 @@ NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org"
 HEADERS = {
     "User-Agent": "WeatherIntelligenceAgent/1.0"
 }
+
+# HTTP timeout settings (in seconds)
+HTTP_TIMEOUT = httpx.Timeout(10.0, connect=5.0)  # 10s total, 5s connect
 
 
 async def geocode_location(
@@ -36,7 +41,7 @@ async def geocode_location(
         "limit": limit,
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         response = await client.get(
             f"{NOMINATIM_BASE_URL}/search",
             params=params,
@@ -88,7 +93,7 @@ async def reverse_geocode(
         "addressdetails": 1,
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         response = await client.get(
             f"{NOMINATIM_BASE_URL}/reverse",
             params=params,

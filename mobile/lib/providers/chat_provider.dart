@@ -5,7 +5,7 @@ import '../services/api_service.dart';
 
 /// Provider for chat state management with the weather agent.
 class ChatProvider extends ChangeNotifier {
-  final ApiService _apiService = ApiService();
+  final ApiService _apiService = ApiService.instance;
   final Uuid _uuid = const Uuid();
 
   List<ChatMessage> _messages = [];

@@ -29,12 +29,14 @@ app = FastAPI(
 
 
 # Configure CORS for mobile app access
+# In production, set CORS_ORIGINS env var to specific allowed origins
+cors_origins = settings.cors_origins_list if settings.cors_origins_list else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=cors_origins,
+    allow_credentials=len(cors_origins) > 0 and cors_origins[0] != "*",  # Only with specific origins
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 

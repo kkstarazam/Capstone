@@ -1,7 +1,8 @@
 """FastAPI routes for the Weather Intelligence Agent API."""
-from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional
+from fastapi import APIRouter, HTTPException, Depends, Query
+from typing import Optional, Annotated
 from datetime import datetime, timedelta
+import logging
 
 from ..models.schemas import (
     ChatRequest,
@@ -15,12 +16,14 @@ from ..models.schemas import (
     CreateAgentRequest,
     AgentResponse,
     CreateReminderRequest,
+    TemperatureUnit,
 )
 from ..tools import weather, geocoding, calendar
 from ..agent.weather_agent import get_agent_manager, WeatherAgentManager
 from ..services.notifications import get_notification_service
 from ..services.weather_alerts import get_weather_alert_service
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -46,54 +49,60 @@ async def send_message(request: ChatRequest):
 # ============== Weather Endpoints ==============
 
 @router.post("/weather/current", tags=["Weather"])
-async def get_current_weather(request: LocationRequest, temperature_unit: str = "fahrenheit"):
+async def get_current_weather(
+    request: LocationRequest,
+    temperature_unit: TemperatureUnit = TemperatureUnit.FAHRENHEIT
+):
     """Get current weather for a location."""
     try:
         result = await weather.get_current_weather(
             latitude=request.latitude,
             longitude=request.longitude,
-            temperature_unit=temperature_unit
+            temperature_unit=temperature_unit.value
         )
         return result
     except Exception as e:
+        logger.error(f"Error fetching weather: {e}")
         raise HTTPException(status_code=500, detail=f"Error fetching weather: {str(e)}")
 
 
 @router.post("/weather/forecast", tags=["Weather"])
 async def get_forecast(
     request: LocationRequest,
-    days: int = 7,
-    temperature_unit: str = "fahrenheit"
+    days: Annotated[int, Query(ge=1, le=16)] = 7,
+    temperature_unit: TemperatureUnit = TemperatureUnit.FAHRENHEIT
 ):
-    """Get weather forecast for a location."""
+    """Get weather forecast for a location (max 16 days)."""
     try:
         result = await weather.get_weather_forecast(
             latitude=request.latitude,
             longitude=request.longitude,
             days=days,
-            temperature_unit=temperature_unit
+            temperature_unit=temperature_unit.value
         )
         return result
     except Exception as e:
+        logger.error(f"Error fetching forecast: {e}")
         raise HTTPException(status_code=500, detail=f"Error fetching forecast: {str(e)}")
 
 
 @router.post("/weather/hourly", tags=["Weather"])
 async def get_hourly(
     request: LocationRequest,
-    hours: int = 24,
-    temperature_unit: str = "fahrenheit"
+    hours: Annotated[int, Query(ge=1, le=168)] = 24,
+    temperature_unit: TemperatureUnit = TemperatureUnit.FAHRENHEIT
 ):
-    """Get hourly weather forecast for a location."""
+    """Get hourly weather forecast for a location (max 168 hours / 7 days)."""
     try:
         result = await weather.get_hourly_forecast(
             latitude=request.latitude,
             longitude=request.longitude,
             hours=hours,
-            temperature_unit=temperature_unit
+            temperature_unit=temperature_unit.value
         )
         return result
     except Exception as e:
+        logger.error(f"Error fetching hourly forecast: {e}")
         raise HTTPException(status_code=500, detail=f"Error fetching hourly forecast: {str(e)}")
 
 
@@ -271,10 +280,10 @@ async def send_test_notification(user_id: str, title: str, body: str):
 
 @router.post("/alerts/subscribe", tags=["Alerts"])
 async def subscribe_to_alerts(
-    user_id: str,
-    latitude: float,
-    longitude: float,
-    location_name: str,
+    user_id: Annotated[str, Query(min_length=1, max_length=255)],
+    latitude: Annotated[float, Query(ge=-90, le=90)],
+    longitude: Annotated[float, Query(ge=-180, le=180)],
+    location_name: Annotated[str, Query(min_length=1, max_length=255)],
     rain_alerts: bool = True,
     temperature_alerts: bool = True,
     severe_weather_alerts: bool = True,

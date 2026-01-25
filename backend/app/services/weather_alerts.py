@@ -7,9 +7,12 @@ import asyncio
 from typing import Optional, Dict, List, Any
 from datetime import datetime, timedelta
 from dataclasses import dataclass
+import logging
 
 from ..tools import weather, geocoding
 from .notifications import get_notification_service
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -181,7 +184,7 @@ class WeatherAlertService:
             sub.last_conditions = current
 
         except Exception as e:
-            print(f"Error checking weather for user {user_id}: {e}")
+            logger.error(f"Error checking weather for user {user_id}: {e}")
 
         return alerts
 
@@ -280,14 +283,14 @@ class WeatherAlertService:
             return
 
         self._running = True
-        print("Weather alert monitoring started")
+        logger.info("Weather alert monitoring started")
 
         while self._running:
             for user_id in list(self._subscriptions.keys()):
                 try:
                     await self.check_weather_for_user(user_id)
                 except Exception as e:
-                    print(f"Error monitoring weather for {user_id}: {e}")
+                    logger.error(f"Error monitoring weather for {user_id}: {e}")
 
             # Wait before next check
             await asyncio.sleep(self._check_interval)
@@ -295,7 +298,7 @@ class WeatherAlertService:
     def stop_monitoring(self):
         """Stop the background weather monitoring."""
         self._running = False
-        print("Weather alert monitoring stopped")
+        logger.info("Weather alert monitoring stopped")
 
 
 # Global weather alert service instance

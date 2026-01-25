@@ -1,7 +1,14 @@
 """Pydantic models for API request/response schemas."""
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, List, Literal
 from datetime import datetime
+from enum import Enum
+
+
+class TemperatureUnit(str, Enum):
+    """Valid temperature units."""
+    FAHRENHEIT = "fahrenheit"
+    CELSIUS = "celsius"
 
 
 # ============== Chat Models ==============
@@ -15,8 +22,16 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     """Request to send a message to the weather agent."""
-    user_id: str = Field(..., description="Unique user identifier")
-    message: str = Field(..., description="User's message")
+    user_id: str = Field(..., min_length=1, max_length=255, description="Unique user identifier")
+    message: str = Field(..., min_length=1, max_length=10000, description="User's message")
+
+    @field_validator('user_id')
+    @classmethod
+    def validate_user_id(cls, v: str) -> str:
+        """Validate user_id contains only safe characters."""
+        if not v.replace('-', '').replace('_', '').replace('.', '').isalnum():
+            raise ValueError('user_id must contain only alphanumeric characters, hyphens, underscores, and dots')
+        return v
 
 
 class ChatResponse(BaseModel):
@@ -30,14 +45,14 @@ class ChatResponse(BaseModel):
 
 class LocationRequest(BaseModel):
     """Request with location information."""
-    latitude: float = Field(..., description="Latitude")
-    longitude: float = Field(..., description="Longitude")
+    latitude: float = Field(..., ge=-90, le=90, description="Latitude (-90 to 90)")
+    longitude: float = Field(..., ge=-180, le=180, description="Longitude (-180 to 180)")
 
 
 class GeocodeRequest(BaseModel):
     """Request to geocode a location."""
-    query: str = Field(..., description="Place name or address to search")
-    limit: int = Field(default=5, description="Maximum results")
+    query: str = Field(..., min_length=0, max_length=500, description="Place name or address to search")
+    limit: int = Field(default=5, ge=1, le=50, description="Maximum results (1-50)")
 
 
 class CurrentWeatherResponse(BaseModel):
@@ -77,7 +92,7 @@ class ForecastResponse(BaseModel):
 
 class UserPreferences(BaseModel):
     """User preference settings."""
-    temperature_unit: str = Field(default="fahrenheit", description="fahrenheit or celsius")
+    temperature_unit: TemperatureUnit = Field(default=TemperatureUnit.FAHRENHEIT, description="Temperature unit")
     home_location: Optional[dict] = Field(default=None, description="Home location coordinates and name")
     favorite_locations: List[dict] = Field(default_factory=list, description="Saved favorite locations")
     notification_enabled: bool = Field(default=True, description="Enable push notifications")
@@ -85,7 +100,7 @@ class UserPreferences(BaseModel):
 
 class UpdatePreferencesRequest(BaseModel):
     """Request to update user preferences."""
-    user_id: str = Field(..., description="User identifier")
+    user_id: str = Field(..., min_length=1, max_length=255, description="User identifier")
     preferences: UserPreferences
 
 
@@ -104,17 +119,17 @@ class CalendarEvent(BaseModel):
 
 class CreateReminderRequest(BaseModel):
     """Request to create a weather reminder."""
-    user_id: str
-    title: str
+    user_id: str = Field(..., min_length=1, max_length=255)
+    title: str = Field(..., min_length=1, max_length=500)
     event_time: datetime
-    weather_note: str
+    weather_note: str = Field(..., min_length=1, max_length=2000)
 
 
 # ============== Agent Management ==============
 
 class CreateAgentRequest(BaseModel):
     """Request to create a new weather agent."""
-    user_id: str = Field(..., description="Unique user identifier")
+    user_id: str = Field(..., min_length=1, max_length=255, description="Unique user identifier")
 
 
 class AgentResponse(BaseModel):
