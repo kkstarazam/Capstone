@@ -4,7 +4,7 @@ import '../services/api_service.dart';
 
 /// Provider for weather data state management.
 class WeatherProvider extends ChangeNotifier {
-  final ApiService _apiService = ApiService();
+  final ApiService _apiService = ApiService.instance;
 
   CurrentWeather? _currentWeather;
   WeatherForecast? _forecast;

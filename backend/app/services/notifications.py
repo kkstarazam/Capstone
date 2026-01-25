@@ -4,9 +4,12 @@ This service handles sending push notifications to mobile devices
 for weather alerts and proactive suggestions.
 """
 import json
-from typing import Optional, List, Dict, Any
-from datetime import datetime
+from typing import Optional, List, Dict, Any, NamedTuple
+from datetime import datetime, timedelta
 import httpx
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Firebase Admin SDK (optional, for production)
 try:
@@ -15,6 +18,19 @@ try:
     FIREBASE_AVAILABLE = True
 except ImportError:
     FIREBASE_AVAILABLE = False
+
+
+class DeviceToken(NamedTuple):
+    """Device token with expiration."""
+    token: str
+    registered_at: datetime
+    last_used: datetime
+
+
+# Token TTL - tokens expire after 30 days of inactivity
+TOKEN_TTL_DAYS = 30
+# Maximum number of tokens to store (to prevent unbounded growth)
+MAX_TOKENS = 10000
 
 
 class NotificationService:
@@ -28,7 +44,7 @@ class NotificationService:
             firebase_credentials_path: Path to Firebase service account JSON
         """
         self._initialized = False
-        self._device_tokens: Dict[str, str] = {}  # user_id -> device_token
+        self._device_tokens: Dict[str, DeviceToken] = {}  # user_id -> DeviceToken
 
         if FIREBASE_AVAILABLE and firebase_credentials_path:
             try:
@@ -36,12 +52,25 @@ class NotificationService:
                 firebase_admin.initialize_app(cred)
                 self._initialized = True
             except Exception as e:
-                print(f"Firebase initialization failed: {e}")
+                logger.warning(f"Firebase initialization failed: {e}")
 
     @property
     def is_available(self) -> bool:
         """Check if notification service is available."""
         return self._initialized
+
+    def _cleanup_expired_tokens(self) -> int:
+        """Remove expired tokens. Returns number of tokens removed."""
+        now = datetime.utcnow()
+        expired_users = [
+            user_id for user_id, token_info in self._device_tokens.items()
+            if (now - token_info.last_used).days > TOKEN_TTL_DAYS
+        ]
+        for user_id in expired_users:
+            del self._device_tokens[user_id]
+        if expired_users:
+            logger.info(f"Cleaned up {len(expired_users)} expired device tokens")
+        return len(expired_users)
 
     def register_device(self, user_id: str, device_token: str) -> bool:
         """
@@ -54,7 +83,21 @@ class NotificationService:
         Returns:
             True if registration successful.
         """
-        self._device_tokens[user_id] = device_token
+        # Cleanup old tokens periodically (every 100 registrations or when near limit)
+        if len(self._device_tokens) >= MAX_TOKENS - 100:
+            self._cleanup_expired_tokens()
+
+        # Enforce maximum token limit
+        if len(self._device_tokens) >= MAX_TOKENS and user_id not in self._device_tokens:
+            logger.warning(f"Max device tokens ({MAX_TOKENS}) reached, rejecting registration")
+            return False
+
+        now = datetime.utcnow()
+        self._device_tokens[user_id] = DeviceToken(
+            token=device_token,
+            registered_at=now,
+            last_used=now
+        )
         return True
 
     def unregister_device(self, user_id: str) -> bool:
@@ -73,8 +116,17 @@ class NotificationService:
         return False
 
     def get_device_token(self, user_id: str) -> Optional[str]:
-        """Get the device token for a user."""
-        return self._device_tokens.get(user_id)
+        """Get the device token for a user (updates last_used time)."""
+        token_info = self._device_tokens.get(user_id)
+        if token_info:
+            # Update last_used time
+            self._device_tokens[user_id] = DeviceToken(
+                token=token_info.token,
+                registered_at=token_info.registered_at,
+                last_used=datetime.utcnow()
+            )
+            return token_info.token
+        return None
 
     async def send_notification(
         self,
@@ -97,18 +149,16 @@ class NotificationService:
         Returns:
             True if notification sent successfully.
         """
-        device_token = self._device_tokens.get(user_id)
+        device_token = self.get_device_token(user_id)
         if not device_token:
-            print(f"No device token for user {user_id}")
+            logger.debug(f"No device token for user {user_id}")
             return False
 
         if not self._initialized:
             # Log notification for testing/development
-            print(f"[NOTIFICATION] To: {user_id}")
-            print(f"  Title: {title}")
-            print(f"  Body: {body}")
+            logger.info(f"[NOTIFICATION] To: {user_id} | Title: {title} | Body: {body}")
             if data:
-                print(f"  Data: {data}")
+                logger.debug(f"  Data: {data}")
             return True
 
         try:
@@ -125,10 +175,10 @@ class NotificationService:
             )
 
             response = messaging.send(message)
-            print(f"Notification sent: {response}")
+            logger.info(f"Notification sent to {user_id}: {response}")
             return True
         except Exception as e:
-            print(f"Failed to send notification: {e}")
+            logger.error(f"Failed to send notification to {user_id}: {e}")
             return False
 
     async def send_weather_alert(

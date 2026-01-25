@@ -6,9 +6,14 @@ https://open-meteo.com/
 import httpx
 from typing import Optional
 from datetime import datetime, timedelta
+import logging
 
+logger = logging.getLogger(__name__)
 
 OPEN_METEO_BASE_URL = "https://api.open-meteo.com/v1"
+
+# HTTP timeout settings (in seconds)
+HTTP_TIMEOUT = httpx.Timeout(10.0, connect=5.0)  # 10s total, 5s connect
 
 
 async def get_current_weather(
@@ -50,7 +55,7 @@ async def get_current_weather(
         "timezone": "auto",
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         response = await client.get(f"{OPEN_METEO_BASE_URL}/forecast", params=params)
         response.raise_for_status()
         data = response.json()
@@ -123,7 +128,7 @@ async def get_weather_forecast(
         "forecast_days": min(days, 16),
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         response = await client.get(f"{OPEN_METEO_BASE_URL}/forecast", params=params)
         response.raise_for_status()
         data = response.json()
@@ -206,7 +211,7 @@ async def get_hourly_forecast(
         "forecast_hours": min(hours, 384),
     }
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         response = await client.get(f"{OPEN_METEO_BASE_URL}/forecast", params=params)
         response.raise_for_status()
         data = response.json()
