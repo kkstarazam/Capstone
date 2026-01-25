@@ -4,11 +4,22 @@ This module configures and manages the stateful weather assistant
 using Letta's memory and tool capabilities.
 """
 from typing import Optional, List
-from letta import create_client, LLMConfig, EmbeddingConfig
-from letta.schemas.memory import ChatMemory
-from letta.schemas.tool import Tool
+import logging
+
+# Try to import from new letta_client API
+try:
+    from letta_client import Letta
+    from letta import LLMConfig, EmbeddingConfig
+    LETTA_AVAILABLE = True
+except ImportError:
+    LETTA_AVAILABLE = False
+    Letta = None
+    LLMConfig = None
+    EmbeddingConfig = None
 
 from ..tools import weather, geocoding, calendar
+
+logger = logging.getLogger(__name__)
 
 
 # Weather Assistant System Prompt
@@ -235,8 +246,29 @@ class WeatherAgentManager:
         Args:
             base_url: Optional Letta server URL (uses default if not provided)
         """
-        self.client = create_client(base_url=base_url)
+        self.base_url = base_url or "http://localhost:8283"
         self._agents = {}
+        self._client = None
+        self._letta_available = False
+
+        # Try to initialize Letta client
+        if LETTA_AVAILABLE:
+            try:
+                self._client = Letta(base_url=self.base_url)
+                # Test connection
+                self._client.health.check()
+                self._letta_available = True
+                logger.info("Letta client connected successfully")
+            except Exception as e:
+                logger.warning(f"Letta server not available: {e}. Running in standalone mode.")
+                self._letta_available = False
+        else:
+            logger.warning("Letta client not installed. Running in standalone mode.")
+
+    @property
+    def client(self):
+        """Get the Letta client if available."""
+        return self._client
 
     def create_agent(self, user_id: str) -> str:
         """
@@ -248,52 +280,69 @@ class WeatherAgentManager:
         Returns:
             Agent ID for the created agent.
         """
-        # Check if agent already exists for this user
-        existing_agents = self.client.list_agents()
-        for agent in existing_agents:
-            if agent.name == f"weather_agent_{user_id}":
-                self._agents[user_id] = agent.id
-                return agent.id
+        # If Letta is not available, use a simple local agent ID
+        if not self._letta_available:
+            agent_id = f"local_agent_{user_id}"
+            self._agents[user_id] = agent_id
+            return agent_id
 
-        # Create memory with persona and user info
-        memory = ChatMemory(
-            human=WEATHER_AGENT_HUMAN,
-            persona=WEATHER_AGENT_PERSONA
-        )
+        try:
+            # Check if agent already exists for this user
+            existing_agents = self._client.agents.list()
+            for agent in existing_agents:
+                if agent.name == f"weather_agent_{user_id}":
+                    self._agents[user_id] = agent.id
+                    return agent.id
 
-        # Create the agent
-        agent_state = self.client.create_agent(
-            name=f"weather_agent_{user_id}",
-            memory=memory,
-            llm_config=LLMConfig(
-                model="gpt-4o-mini",  # Can be configured
-                model_endpoint_type="openai"
-            ),
-            embedding_config=EmbeddingConfig(
-                embedding_endpoint_type="openai",
-                embedding_model="text-embedding-ada-002"
+            # Create the agent with new API
+            agent_state = self._client.agents.create(
+                name=f"weather_agent_{user_id}",
+                system=WEATHER_AGENT_PERSONA,
+                memory_blocks=[
+                    {"label": "human", "value": WEATHER_AGENT_HUMAN},
+                    {"label": "persona", "value": WEATHER_AGENT_PERSONA}
+                ],
+                model="gpt-4o-mini",
+                embedding="text-embedding-ada-002"
             )
-        )
 
-        # Register tools with the agent
-        self._register_tools(agent_state.id)
+            # Register tools with the agent
+            self._register_tools(agent_state.id)
 
-        self._agents[user_id] = agent_state.id
-        return agent_state.id
+            self._agents[user_id] = agent_state.id
+            return agent_state.id
+        except Exception as e:
+            logger.error(f"Error creating agent: {e}")
+            # Fallback to local agent
+            agent_id = f"local_agent_{user_id}"
+            self._agents[user_id] = agent_id
+            return agent_id
 
     def _register_tools(self, agent_id: str):
         """Register weather tools with an agent."""
+        if not self._letta_available:
+            return
+
         tools = get_weather_tools()
         for tool_def in tools:
             try:
-                tool = self.client.create_tool(
-                    func=self._get_tool_function(tool_def["name"]),
-                    name=tool_def["name"],
+                # Get source code for the tool function
+                func = self._get_tool_function(tool_def["name"])
+                if func is None:
+                    continue
+
+                import inspect
+                source_code = inspect.getsource(func)
+
+                tool = self._client.tools.create(
+                    source_code=source_code,
+                    description=tool_def.get("description", ""),
                     tags=["weather", "utility"]
                 )
-                self.client.add_tool_to_agent(agent_id=agent_id, tool_id=tool.id)
+                # Add tool to agent
+                self._client.agents.tools.create(agent_id=agent_id, tool_id=tool.id)
             except Exception as e:
-                print(f"Warning: Could not register tool {tool_def['name']}: {e}")
+                logger.warning(f"Could not register tool {tool_def['name']}: {e}")
 
     def _get_tool_function(self, name: str):
         """Get the actual function for a tool name."""
@@ -321,12 +370,18 @@ class WeatherAgentManager:
         if user_id in self._agents:
             return self._agents[user_id]
 
-        # Check if agent exists in Letta
-        existing_agents = self.client.list_agents()
-        for agent in existing_agents:
-            if agent.name == f"weather_agent_{user_id}":
-                self._agents[user_id] = agent.id
-                return agent.id
+        if not self._letta_available:
+            return None
+
+        try:
+            # Check if agent exists in Letta
+            existing_agents = self._client.agents.list()
+            for agent in existing_agents:
+                if agent.name == f"weather_agent_{user_id}":
+                    self._agents[user_id] = agent.id
+                    return agent.id
+        except Exception as e:
+            logger.warning(f"Error listing agents: {e}")
 
         return None
 
@@ -345,30 +400,65 @@ class WeatherAgentManager:
         if not agent_id:
             agent_id = self.create_agent(user_id)
 
-        response = self.client.send_message(
-            agent_id=agent_id,
-            message=message,
-            role="user"
-        )
+        # If Letta is not available, provide a fallback response
+        if not self._letta_available or agent_id.startswith("local_agent_"):
+            return await self._handle_message_locally(user_id, message)
 
-        # Extract the assistant's response
-        assistant_messages = []
-        tool_calls = []
+        try:
+            response = self._client.agents.messages.create(
+                agent_id=agent_id,
+                input=message
+            )
 
-        for msg in response.messages:
-            if hasattr(msg, 'assistant_message') and msg.assistant_message:
-                assistant_messages.append(msg.assistant_message)
-            if hasattr(msg, 'tool_call') and msg.tool_call:
-                tool_calls.append({
-                    "name": msg.tool_call.name,
-                    "arguments": msg.tool_call.arguments
-                })
+            # Extract the assistant's response
+            assistant_messages = []
+            tool_calls = []
 
-        return {
-            "response": " ".join(assistant_messages) if assistant_messages else "I processed your request.",
-            "tool_calls": tool_calls,
-            "agent_id": agent_id
-        }
+            for msg in response.messages:
+                if hasattr(msg, 'assistant_message') and msg.assistant_message:
+                    assistant_messages.append(msg.assistant_message)
+                if hasattr(msg, 'tool_call') and msg.tool_call:
+                    tool_calls.append({
+                        "name": msg.tool_call.name,
+                        "arguments": msg.tool_call.arguments
+                    })
+
+            return {
+                "response": " ".join(assistant_messages) if assistant_messages else "I processed your request.",
+                "tool_calls": tool_calls,
+                "agent_id": agent_id
+            }
+        except Exception as e:
+            logger.error(f"Error sending message to Letta: {e}")
+            return await self._handle_message_locally(user_id, message)
+
+    async def _handle_message_locally(self, user_id: str, message: str) -> dict:
+        """
+        Handle messages locally when Letta is not available.
+
+        Provides basic weather functionality without AI agent.
+        """
+        message_lower = message.lower()
+
+        # Simple keyword-based response
+        if "weather" in message_lower or "temperature" in message_lower:
+            return {
+                "response": "I can help with weather information! Please use the weather endpoints directly (/api/v1/weather/current or /api/v1/weather/forecast) with your location coordinates, or search for a location using /api/v1/geocode.",
+                "tool_calls": [],
+                "agent_id": f"local_agent_{user_id}"
+            }
+        elif "forecast" in message_lower:
+            return {
+                "response": "For weather forecasts, please use the /api/v1/weather/forecast endpoint with latitude and longitude coordinates.",
+                "tool_calls": [],
+                "agent_id": f"local_agent_{user_id}"
+            }
+        else:
+            return {
+                "response": "I'm the Weather Intelligence Assistant. I can help you with weather information, forecasts, and location searches. The full AI capabilities require a Letta server connection. For now, please use the direct API endpoints for weather data.",
+                "tool_calls": [],
+                "agent_id": f"local_agent_{user_id}"
+            }
 
     def update_user_preferences(self, user_id: str, preferences: dict):
         """
@@ -379,24 +469,29 @@ class WeatherAgentManager:
             preferences: Dictionary of preferences to update
         """
         agent_id = self.get_agent_id(user_id)
-        if not agent_id:
+        if not agent_id or not self._letta_available:
             return
 
-        # Build updated human memory block
-        current_memory = self.client.get_agent_memory(agent_id)
+        try:
+            # Update preferences via agent blocks
+            updates = []
+            if "temperature_unit" in preferences:
+                updates.append(f"Preferred temperature unit: {preferences['temperature_unit']}")
+            if "home_location" in preferences:
+                updates.append(f"Home location: {preferences['home_location']}")
+            if "name" in preferences:
+                updates.append(f"Name: {preferences['name']}")
 
-        # Update the human block with new preferences
-        updates = []
-        if "temperature_unit" in preferences:
-            updates.append(f"Preferred temperature unit: {preferences['temperature_unit']}")
-        if "home_location" in preferences:
-            updates.append(f"Home location: {preferences['home_location']}")
-        if "name" in preferences:
-            updates.append(f"Name: {preferences['name']}")
-
-        if updates:
-            # This would update the memory - implementation depends on Letta version
-            pass
+            if updates:
+                # Update the human block with new preferences
+                human_block = WEATHER_AGENT_HUMAN + "\n\nUpdated preferences:\n" + "\n".join(updates)
+                self._client.agents.blocks.update(
+                    agent_id=agent_id,
+                    block_label="human",
+                    value=human_block
+                )
+        except Exception as e:
+            logger.warning(f"Error updating preferences: {e}")
 
     def delete_agent(self, user_id: str):
         """
@@ -407,8 +502,13 @@ class WeatherAgentManager:
         """
         agent_id = self.get_agent_id(user_id)
         if agent_id:
-            self.client.delete_agent(agent_id)
-            del self._agents[user_id]
+            if self._letta_available and not agent_id.startswith("local_agent_"):
+                try:
+                    self._client.agents.delete(agent_id)
+                except Exception as e:
+                    logger.warning(f"Error deleting agent from Letta: {e}")
+            if user_id in self._agents:
+                del self._agents[user_id]
 
 
 # Global agent manager instance

@@ -1,5 +1,6 @@
 """Tests for weather tools."""
 import pytest
+import httpx
 from app.tools.weather import (
     get_current_weather,
     get_weather_forecast,
@@ -8,6 +9,23 @@ from app.tools.weather import (
 )
 
 
+def network_available():
+    """Check if external network is available."""
+    try:
+        httpx.get("https://api.open-meteo.com/v1/forecast?latitude=0&longitude=0&current=temperature_2m", timeout=5)
+        return True
+    except Exception:
+        return False
+
+
+# Skip network tests if network is unavailable
+network_required = pytest.mark.skipif(
+    not network_available(),
+    reason="External network not available (proxy or firewall blocking requests)"
+)
+
+
+@network_required
 @pytest.mark.asyncio
 async def test_get_current_weather():
     """Test fetching current weather for New York."""
@@ -24,6 +42,7 @@ async def test_get_current_weather():
     assert result["temperature_unit"] == "fahrenheit"
 
 
+@network_required
 @pytest.mark.asyncio
 async def test_get_weather_forecast():
     """Test fetching weather forecast."""
@@ -39,6 +58,7 @@ async def test_get_weather_forecast():
     assert "temp_low" in result["forecasts"][0]
 
 
+@network_required
 @pytest.mark.asyncio
 async def test_get_hourly_forecast():
     """Test fetching hourly forecast."""
