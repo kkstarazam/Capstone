@@ -252,8 +252,8 @@
                 });
                 const data = await response.json();
 
-                if (data.results && data.results.length > 0) {
-                    const loc = data.results[0];
+                if (data.locations && data.locations.length > 0) {
+                    const loc = data.locations[0];
                     currentLat = loc.latitude;
                     currentLon = loc.longitude;
                     resultEl.innerHTML = `<p>Found: ${loc.display_name}</p>`;
