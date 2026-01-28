@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Intelligence Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            text-align: center;
+            padding: 30px 0;
+        }
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        header p {
+            opacity: 0.8;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .card h2 {
+            margin-bottom: 20px;
+            font-size: 1.3rem;
+        }
+        .weather-display {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+        }
+        .weather-item {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+        }
+        .weather-item .value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .weather-item .label {
+            opacity: 0.7;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+        .location-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input, button {
+            padding: 15px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+        }
+        input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .chat-container {
+            height: 300px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 18px;
+            border-radius: 15px;
+            max-width: 80%;
+        }
+        .message.user {
+            background: #4CAF50;
+            margin-left: auto;
+            text-align: right;
+        }
+        .message.agent {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input input {
+            flex: 1;
+        }
+        .forecast-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+        }
+        .forecast-day {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+        }
+        .forecast-day .date {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .forecast-day .temp {
+            font-size: 1.2rem;
+        }
+        .forecast-day .temp-low {
+            opacity: 0.7;
+            font-size: 0.9rem;
+        }
+        .error {
+            background: rgba(244, 67, 54, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            opacity: 0.7;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+        .status.connected {
+            color: #4CAF50;
+        }
+        .status.disconnected {
+            color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Weather Intelligence Agent</h1>
+            <p>AI-powered weather assistant with personalized recommendations</p>
+            <div id="status" class="status">Checking connection...</div>
+        </header>
+
+        <!-- Location Search -->
+        <div class="card">
+            <h2>Search Location</h2>
+            <div class="location-input">
+                <input type="text" id="locationInput" placeholder="Enter city name (e.g., New York)" onkeypress="if(event.key==='Enter')searchLocation()">
+                <button onclick="searchLocation()">Search</button>
+                <button onclick="useMyLocation()">Use My Location</button>
+            </div>
+            <div id="locationResult"></div>
+        </div>
+
+        <!-- Current Weather -->
+        <div class="card">
+            <h2>Current Weather</h2>
+            <div id="currentWeather" class="loading">Search for a location to see weather</div>
+        </div>
+
+        <!-- Forecast -->
+        <div class="card">
+            <h2>7-Day Forecast</h2>
+            <div id="forecast" class="loading">Search for a location to see forecast</div>
+        </div>
+
+        <!-- Chat -->
+        <div class="card">
+            <h2>Chat with Weather Agent</h2>
+            <div class="chat-container" id="chatContainer">
+                <div class="message agent">Hello! I'm your Weather Intelligence Agent. Ask me anything about the weather!</div>
+            </div>
+            <div class="chat-input">
+                <input type="text" id="chatInput" placeholder="Ask about weather..." onkeypress="if(event.key==='Enter')sendMessage()">
+                <button onclick="sendMessage()" id="sendBtn">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+        let currentLat = null;
+        let currentLon = null;
+        const userId = 'web-user-' + Math.random().toString(36).substr(2, 9);
+
+        // Check API connection on load
+        async function checkConnection() {
+            const statusEl = document.getElementById('status');
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                if (response.ok) {
+                    statusEl.textContent = 'Connected to backend';
+                    statusEl.className = 'status connected';
+                } else {
+                    throw new Error('Not healthy');
+                }
+            } catch (e) {
+                statusEl.textContent = 'Backend not connected - make sure python run.py is running';
+                statusEl.className = 'status disconnected';
+            }
+        }
+
+        // Search for a location
+        async function searchLocation() {
+            const query = document.getElementById('locationInput').value.trim();
+            if (!query) return;
+
+            const resultEl = document.getElementById('locationResult');
+            resultEl.innerHTML = '<div class="loading">Searching...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/geocode`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query, limit: 5 })
+                });
+                const data = await response.json();
+
+                if (data.results && data.results.length > 0) {
+                    const loc = data.results[0];
+                    currentLat = loc.latitude;
+                    currentLon = loc.longitude;
+                    resultEl.innerHTML = `<p>Found: ${loc.display_name}</p>`;
+                    loadWeather();
+                } else {
+                    resultEl.innerHTML = '<div class="error">Location not found</div>';
+                }
+            } catch (e) {
+                resultEl.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+            }
+        }
+
+        // Use browser geolocation
+        function useMyLocation() {
+            const resultEl = document.getElementById('locationResult');
+            if (!navigator.geolocation) {
+                resultEl.innerHTML = '<div class="error">Geolocation not supported</div>';
+                return;
+            }
+
+            resultEl.innerHTML = '<div class="loading">Getting your location...</div>';
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    currentLat = position.coords.latitude;
+                    currentLon = position.coords.longitude;
+
+                    // Reverse geocode to get location name
+                    try {
+                        const response = await fetch(`${API_BASE}/reverse-geocode`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ latitude: currentLat, longitude: currentLon })
+                        });
+                        const data = await response.json();
+                        resultEl.innerHTML = `<p>Your location: ${data.display_name || 'Found'}</p>`;
+                    } catch (e) {
+                        resultEl.innerHTML = `<p>Using coordinates: ${currentLat.toFixed(2)}, ${currentLon.toFixed(2)}</p>`;
+                    }
+                    loadWeather();
+                },
+                (error) => {
+                    resultEl.innerHTML = `<div class="error">Could not get location: ${error.message}</div>`;
+                }
+            );
+        }
+
+        // Load weather data
+        async function loadWeather() {
+            if (!currentLat || !currentLon) return;
+            await Promise.all([loadCurrentWeather(), loadForecast()]);
+        }
+
+        // Load current weather
+        async function loadCurrentWeather() {
+            const el = document.getElementById('currentWeather');
+            el.innerHTML = '<div class="loading">Loading...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/weather/current`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ latitude: currentLat, longitude: currentLon })
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                el.innerHTML = `
+                    <div class="weather-display">
+                        <div class="weather-item">
+                            <div class="value">${Math.round(data.temperature)}°F</div>
+                            <div class="label">Temperature</div>
+                        </div>
+                        <div class="weather-item">
+                            <div class="value">${Math.round(data.feels_like)}°F</div>
+                            <div class="label">Feels Like</div>
+                        </div>
+                        <div class="weather-item">
+                            <div class="value">${data.humidity}%</div>
+                            <div class="label">Humidity</div>
+                        </div>
+                        <div class="weather-item">
+                            <div class="value">${Math.round(data.wind_speed)} mph</div>
+                            <div class="label">Wind</div>
+                        </div>
+                        <div class="weather-item">
+                            <div class="value">${data.weather_description || 'N/A'}</div>
+                            <div class="label">Conditions</div>
+                        </div>
+                        <div class="weather-item">
+                            <div class="value">${data.cloud_cover}%</div>
+                            <div class="label">Cloud Cover</div>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                el.innerHTML = `<div class="error">Error loading weather: ${e.message}</div>`;
+            }
+        }
+
+        // Load forecast
+        async function loadForecast() {
+            const el = document.getElementById('forecast');
+            el.innerHTML = '<div class="loading">Loading...</div>';
+
+            try {
+                const response = await fetch(`${API_BASE}/weather/forecast?days=7`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ latitude: currentLat, longitude: currentLon })
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                const days = data.daily || [];
+                el.innerHTML = `
+                    <div class="forecast-grid">
+                        ${days.map(day => `
+                            <div class="forecast-day">
+                                <div class="date">${new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                                <div class="temp">${Math.round(day.temperature_max)}°F</div>
+                                <div class="temp-low">${Math.round(day.temperature_min)}°F</div>
+                                <div class="label">${day.weather_description || ''}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } catch (e) {
+                el.innerHTML = `<div class="error">Error loading forecast: ${e.message}</div>`;
+            }
+        }
+
+        // Send chat message
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const container = document.getElementById('chatContainer');
+            const sendBtn = document.getElementById('sendBtn');
+
+            // Add user message
+            container.innerHTML += `<div class="message user">${escapeHtml(message)}</div>`;
+            input.value = '';
+            container.scrollTop = container.scrollHeight;
+            sendBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, message })
+                });
+                const data = await response.json();
+
+                const agentMessage = data.response || data.message || 'Sorry, I could not process that.';
+                container.innerHTML += `<div class="message agent">${escapeHtml(agentMessage)}</div>`;
+            } catch (e) {
+                container.innerHTML += `<div class="message agent error">Error: ${e.message}</div>`;
+            }
+
+            container.scrollTop = container.scrollHeight;
+            sendBtn.disabled = false;
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize
+        checkConnection();
+    </script>
+</body>
+</html>
