@@ -373,14 +373,14 @@
                     throw new Error(data.error);
                 }
 
-                const days = data.daily || [];
+                const days = data.forecasts || [];
                 el.innerHTML = `
                     <div class="forecast-grid">
                         ${days.map(day => `
                             <div class="forecast-day">
                                 <div class="date">${new Date(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
-                                <div class="temp">${Math.round(day.temperature_max)}°F</div>
-                                <div class="temp-low">${Math.round(day.temperature_min)}°F</div>
+                                <div class="temp">${Math.round(day.temp_high)}°F</div>
+                                <div class="temp-low">${Math.round(day.temp_low)}°F</div>
                                 <div class="label">${day.weather_description || ''}</div>
                             </div>
                         `).join('')}
