@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # CORS settings - comma-separated list of allowed origins
     # Example: "http://localhost:3000,https://myapp.com"
-    cors_origins: str = "http://localhost:3000,http://localhost:8080"
+    cors_origins: str = "http://localhost:3000,http://localhost:5500,http://localhost:8080"
 
     # Letta settings
     letta_base_url: Optional[str] = None  # Uses default if not set
