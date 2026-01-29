@@ -440,22 +440,113 @@ class WeatherAgentManager:
         """
         message_lower = message.lower()
 
-        # Simple keyword-based response
-        if "weather" in message_lower or "temperature" in message_lower:
+        # Calendar-related queries
+        if any(word in message_lower for word in ["calendar", "events", "schedule", "meeting", "appointment"]):
+            try:
+                available = await calendar.check_calendar_availability(user_id)
+                if available:
+                    events = await calendar.get_upcoming_events(user_id=user_id, max_results=10)
+                    if events:
+                        event_list = []
+                        for event in events:
+                            start = event.get("start", "Unknown time")
+                            summary = event.get("summary", "No title")
+                            event_list.append(f"- {summary} ({start})")
+                        events_text = "\n".join(event_list)
+                        return {
+                            "response": f"Here are your upcoming calendar events:\n\n{events_text}",
+                            "tool_calls": [{"name": "get_calendar_events", "arguments": {}}],
+                            "agent_id": f"local_agent_{user_id}"
+                        }
+                    else:
+                        return {
+                            "response": "You don't have any upcoming events on your calendar.",
+                            "tool_calls": [{"name": "get_calendar_events", "arguments": {}}],
+                            "agent_id": f"local_agent_{user_id}"
+                        }
+                else:
+                    return {
+                        "response": "Google Calendar is not connected. Please set up OAuth credentials to use calendar features.",
+                        "tool_calls": [],
+                        "agent_id": f"local_agent_{user_id}"
+                    }
+            except Exception as e:
+                logger.error(f"Calendar error: {e}")
+                return {
+                    "response": f"I had trouble accessing your calendar: {str(e)}",
+                    "tool_calls": [],
+                    "agent_id": f"local_agent_{user_id}"
+                }
+
+        # Weather-related queries
+        elif any(word in message_lower for word in ["weather", "temperature", "rain", "snow", "sunny", "cloudy", "wind"]):
+            # Try to extract a location from the message
+            try:
+                # Check for common location patterns
+                location_query = None
+                for prefix in ["weather in ", "weather for ", "weather at ", "temperature in ", "temperature at "]:
+                    if prefix in message_lower:
+                        location_query = message_lower.split(prefix, 1)[1].strip().rstrip("?.")
+                        break
+
+                if location_query:
+                    locations = await geocoding.geocode_location(location_query, limit=1)
+                    if locations:
+                        loc = locations[0]
+                        weather_data = await weather.get_current_weather(loc["latitude"], loc["longitude"])
+                        return {
+                            "response": f"Current weather in {loc['display_name']}:\n\n"
+                                        f"Temperature: {weather_data['temperature']}°F\n"
+                                        f"Feels like: {weather_data['feels_like']}°F\n"
+                                        f"Conditions: {weather_data['weather_description']}\n"
+                                        f"Humidity: {weather_data['humidity']}%\n"
+                                        f"Wind: {weather_data['wind_speed']} mph",
+                            "tool_calls": [{"name": "get_current_weather", "arguments": {"latitude": loc["latitude"], "longitude": loc["longitude"]}}],
+                            "agent_id": f"local_agent_{user_id}"
+                        }
+                    else:
+                        return {
+                            "response": f"I couldn't find the location '{location_query}'. Please try a different search.",
+                            "tool_calls": [],
+                            "agent_id": f"local_agent_{user_id}"
+                        }
+                else:
+                    return {
+                        "response": "I can help with weather! Try asking something like 'weather in New York' or 'temperature in London'.",
+                        "tool_calls": [],
+                        "agent_id": f"local_agent_{user_id}"
+                    }
+            except Exception as e:
+                logger.error(f"Weather query error: {e}")
+                return {
+                    "response": f"I had trouble getting weather data: {str(e)}",
+                    "tool_calls": [],
+                    "agent_id": f"local_agent_{user_id}"
+                }
+
+        elif "forecast" in message_lower:
             return {
-                "response": "I can help with weather information! Please use the weather endpoints directly (/api/v1/weather/current or /api/v1/weather/forecast) with your location coordinates, or search for a location using /api/v1/geocode.",
+                "response": "I can get forecasts! Try asking 'forecast for Chicago' or use the Search Location box above to see the 7-day forecast.",
                 "tool_calls": [],
                 "agent_id": f"local_agent_{user_id}"
             }
-        elif "forecast" in message_lower:
+        elif any(word in message_lower for word in ["hello", "hi", "hey", "help"]):
             return {
-                "response": "For weather forecasts, please use the /api/v1/weather/forecast endpoint with latitude and longitude coordinates.",
+                "response": "Hello! I'm your Weather Intelligence Assistant. I can help you with:\n\n"
+                            "- Weather: 'weather in New York'\n"
+                            "- Calendar: 'show my calendar events'\n"
+                            "- Forecasts: 'forecast for London'\n\n"
+                            "What would you like to know?",
                 "tool_calls": [],
                 "agent_id": f"local_agent_{user_id}"
             }
         else:
             return {
-                "response": "I'm the Weather Intelligence Assistant. I can help you with weather information, forecasts, and location searches. The full AI capabilities require a Letta server connection. For now, please use the direct API endpoints for weather data.",
+                "response": "I'm your Weather Intelligence Assistant! Try asking me about:\n\n"
+                            "- Weather: 'weather in New York'\n"
+                            "- Calendar: 'show my calendar events'\n"
+                            "- Forecasts: 'forecast for Chicago'\n\n"
+                            "What can I help you with?",
                 "tool_calls": [],
                 "agent_id": f"local_agent_{user_id}"
             }
